@@ -76,7 +76,7 @@ async function processCallback(requestId: string) {
   }
 }
 
-const PYTHON_API_URL = "http://127.0.0.1:8001";
+const PYTHON_API_URL = process.env.UNIAPI_URL || "http://127.0.0.1:8001";
 
 export async function registerRoutes(
   httpServer: Server,

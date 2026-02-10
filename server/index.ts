@@ -248,7 +248,11 @@ export function restartPythonApi(): Promise<void> {
 }
 
 (async () => {
-  startPythonApi();
+  if (!process.env.UNIAPI_URL) {
+    startPythonApi();
+  } else {
+    log(`Using external UniAPI at ${process.env.UNIAPI_URL}`, "uniapi");
+  }
 
   await registerRoutes(httpServer, app);
 

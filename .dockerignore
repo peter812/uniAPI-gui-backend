@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.gitignore
+*.md
+!uniapi-main/**/*.md
+.env
+.env.local
+__pycache__
+*.pyc
+.venv
+uv.lock
+.replit
+replit.nix
+replit.md
+generated-icon.png

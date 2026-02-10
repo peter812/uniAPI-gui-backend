@@ -1,0 +1,98 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-uniapi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uniapi_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-uniapi}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-uniapi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  uniapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: uniapi
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - bridge_auth:/app/backend
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  instagram-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: bridge
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    working_dir: /app/backend/platforms/instagram
+    command: ["python", "instagram_bridge_server.py"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      uniapi:
+        condition: service_healthy
+    profiles:
+      - bridges
+
+  facebook-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: bridge
+    restart: unless-stopped
+    ports:
+      - "5004:5004"
+    working_dir: /app/backend/platforms/facebook
+    command: ["python", "facebook_bridge_server.py"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      uniapi:
+        condition: service_healthy
+    profiles:
+      - bridges
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-uniapi}:${POSTGRES_PASSWORD:-uniapi_secret}@db:5432/${POSTGRES_DB:-uniapi}
+      UNIAPI_URL: http://uniapi:8001
+    depends_on:
+      db:
+        condition: service_healthy
+      uniapi:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  bridge_auth:
