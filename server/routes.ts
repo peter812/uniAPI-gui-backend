@@ -197,7 +197,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      const isValid = await bcrypt.compare(password, settings.adminPassword);
+      const isValid = password === settings.adminPassword;
       if (!isValid) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
