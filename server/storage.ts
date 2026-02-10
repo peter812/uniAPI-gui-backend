@@ -1,38 +1,138 @@
-import { type User, type InsertUser } from "@shared/schema";
+import { db } from "./db";
+import { scrapeRequests, adminSettings } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import type { ScrapeRequest, AdminSettings } from "@shared/schema";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getAdminSettings(): Promise<AdminSettings | undefined>;
+  initializeAdmin(password: string): Promise<AdminSettings>;
+  resetApiKey(): Promise<string>;
+  updateInstagramToken(token: string): Promise<void>;
+
+  createScrapeRequest(data: {
+    requestType: string;
+    queryString: string;
+    extraOptions?: any;
+    clientUuid: string;
+    apiKey: string;
+    callbackUrl: string;
+  }): Promise<ScrapeRequest>;
+  getScrapeRequests(limit?: number): Promise<ScrapeRequest[]>;
+  getScrapeRequestByServerUuid(serverUuid: string): Promise<ScrapeRequest | undefined>;
+  updateScrapeRequestStatus(id: string, status: string, result?: any, errorMessage?: string): Promise<void>;
+  getNextQueuedRequest(): Promise<ScrapeRequest | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async getAdminSettings(): Promise<AdminSettings | undefined> {
+    const [settings] = await db.select().from(adminSettings).limit(1);
+    return settings;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async initializeAdmin(password: string): Promise<AdminSettings> {
+    const existing = await this.getAdminSettings();
+    if (existing) return existing;
+
+    const [settings] = await db
+      .insert(adminSettings)
+      .values({
+        apiKey: `uniapi_${randomUUID().replace(/-/g, "")}`,
+        adminPassword: password,
+      })
+      .returning();
+    return settings;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async resetApiKey(): Promise<string> {
+    const newKey = `uniapi_${randomUUID().replace(/-/g, "")}`;
+    const settings = await this.getAdminSettings();
+    if (settings) {
+      await db
+        .update(adminSettings)
+        .set({ apiKey: newKey })
+        .where(eq(adminSettings.id, settings.id));
+    }
+    return newKey;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async updateInstagramToken(token: string): Promise<void> {
+    const settings = await this.getAdminSettings();
+    if (settings) {
+      await db
+        .update(adminSettings)
+        .set({ instagramToken: token })
+        .where(eq(adminSettings.id, settings.id));
+    }
+  }
+
+  async createScrapeRequest(data: {
+    requestType: string;
+    queryString: string;
+    extraOptions?: any;
+    clientUuid: string;
+    apiKey: string;
+    callbackUrl: string;
+  }): Promise<ScrapeRequest> {
+    const serverUuid = randomUUID();
+    const [request] = await db
+      .insert(scrapeRequests)
+      .values({
+        requestType: data.requestType,
+        queryString: data.queryString,
+        extraOptions: data.extraOptions || null,
+        clientUuid: data.clientUuid,
+        serverUuid,
+        apiKey: data.apiKey,
+        callbackUrl: data.callbackUrl,
+        status: "queued",
+      })
+      .returning();
+    return request;
+  }
+
+  async getScrapeRequests(limit = 50): Promise<ScrapeRequest[]> {
+    return db
+      .select()
+      .from(scrapeRequests)
+      .orderBy(desc(scrapeRequests.createdAt))
+      .limit(limit);
+  }
+
+  async getScrapeRequestByServerUuid(serverUuid: string): Promise<ScrapeRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(scrapeRequests)
+      .where(eq(scrapeRequests.serverUuid, serverUuid));
+    return request;
+  }
+
+  async updateScrapeRequestStatus(
+    id: string,
+    status: string,
+    result?: any,
+    errorMessage?: string
+  ): Promise<void> {
+    await db
+      .update(scrapeRequests)
+      .set({
+        status,
+        result: result || null,
+        errorMessage: errorMessage || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(scrapeRequests.id, id));
+  }
+
+  async getNextQueuedRequest(): Promise<ScrapeRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(scrapeRequests)
+      .where(eq(scrapeRequests.status, "queued"))
+      .orderBy(scrapeRequests.createdAt)
+      .limit(1);
+    return request;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
