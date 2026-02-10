@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
-import { authFetch, authPost } from "@/lib/admin-api";
+import { authFetch, authPost, authDelete } from "@/lib/admin-api";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,11 +62,7 @@ function TokenItem({
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const res = await authFetch(`/api/admin/platform-tokens/${token.id}`, sessionToken, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete token");
-      return res.json();
+      return authDelete(`/api/admin/platform-tokens/${token.id}`, sessionToken);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-tokens"] });
@@ -258,6 +254,11 @@ export default function AdminTokens({ sessionToken }: AdminTokensProps) {
     queryKey: ["/api/admin/platform-tokens"],
     queryFn: async () => {
       const res = await authFetch("/api/admin/platform-tokens", sessionToken);
+      if (res.status === 401) {
+        sessionStorage.removeItem("adminSession");
+        window.location.reload();
+        throw new Error("Session expired");
+      }
       if (!res.ok) throw new Error("Failed to fetch tokens");
       return res.json();
     },
