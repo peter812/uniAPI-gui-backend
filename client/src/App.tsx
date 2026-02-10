@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import Dashboard from "@/pages/dashboard";
 import PlatformPage from "@/pages/platform-page";
 import Admin from "@/pages/admin";
+import AdminTokensPage from "@/pages/admin-tokens-page";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/facebook">{() => <PlatformPage platform="facebook" />}</Route>
       <Route path="/linkedin">{() => <PlatformPage platform="linkedin" />}</Route>
       <Route path="/admin" component={Admin} />
+      <Route path="/admin/tokens" component={AdminTokensPage} />
       <Route component={NotFound} />
     </Switch>
   );

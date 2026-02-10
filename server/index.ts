@@ -60,8 +60,11 @@ app.use((req, res, next) => {
   next();
 });
 
+let pythonProcess: ReturnType<typeof spawn> | null = null;
+let manualRestart = false;
+
 function startPythonApi() {
-  const pythonProcess = spawn("python", [
+  pythonProcess = spawn("python", [
     "-c",
     `import uvicorn; uvicorn.run('main:app', host='0.0.0.0', port=8001, log_level='info')`
   ], {
@@ -85,11 +88,32 @@ function startPythonApi() {
   });
 
   pythonProcess.on("exit", (code) => {
-    log(`Python API exited with code ${code}. Restarting in 5s...`, "uniapi");
-    setTimeout(startPythonApi, 5000);
+    if (manualRestart) {
+      manualRestart = false;
+      log(`Python API stopped for restart. Starting again...`, "uniapi");
+      startPythonApi();
+    } else {
+      log(`Python API exited with code ${code}. Restarting in 5s...`, "uniapi");
+      setTimeout(startPythonApi, 5000);
+    }
   });
 
   return pythonProcess;
+}
+
+export function restartPythonApi(): Promise<void> {
+  return new Promise((resolve) => {
+    if (pythonProcess) {
+      manualRestart = true;
+      pythonProcess.once("exit", () => {
+        setTimeout(resolve, 2000);
+      });
+      pythonProcess.kill("SIGTERM");
+    } else {
+      startPythonApi();
+      setTimeout(resolve, 2000);
+    }
+  });
 }
 
 (async () => {

@@ -2,9 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { storage } from "./storage";
-import { clientScrapeRequestSchema } from "@shared/schema";
+import { clientScrapeRequestSchema, insertPlatformTokenSchema } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { log } from "./index";
+import { log, restartPythonApi } from "./index";
 import bcrypt from "bcryptjs";
 
 const activeSessions = new Map<string, { createdAt: number }>();
@@ -266,6 +266,56 @@ export async function registerRoutes(
 
     const requests = await storage.getScrapeRequests(50);
     res.json(requests);
+  });
+
+  app.get("/api/admin/platform-tokens", async (req, res) => {
+    if (!requireAdmin(req)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const platform = req.query.platform as string | undefined;
+    const tokens = await storage.getPlatformTokens(platform);
+    res.json(tokens);
+  });
+
+  app.post("/api/admin/platform-tokens", async (req, res) => {
+    if (!requireAdmin(req)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const parsed = insertPlatformTokenSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid request",
+        details: parsed.error.flatten().fieldErrors,
+      });
+    }
+
+    const token = await storage.upsertPlatformToken(parsed.data);
+    res.json(token);
+  });
+
+  app.delete("/api/admin/platform-tokens/:id", async (req, res) => {
+    if (!requireAdmin(req)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    await storage.deletePlatformToken(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post("/api/admin/restart-python", async (req, res) => {
+    if (!requireAdmin(req)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      log("Admin requested Python API restart");
+      await restartPythonApi();
+      res.json({ success: true, message: "Python server restarted" });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to restart Python server", message: error.message });
+    }
   });
 
   return httpServer;

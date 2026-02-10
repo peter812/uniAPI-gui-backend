@@ -20,7 +20,7 @@ A unified social media API platform providing consistent interfaces for Twitter,
 ## Key Files
 - `server/index.ts` - Express server + Python API child process management
 - `server/routes.ts` - API endpoints, proxy setup, admin auth
-- `shared/schema.ts` - Database models (scrape_requests, admin_settings)
+- `shared/schema.ts` - Database models (scrape_requests, admin_settings, platform_tokens)
 - `server/storage.ts` - Database CRUD operations via Drizzle
 - `client/src/App.tsx` - React app with sidebar layout and routing
 - `client/src/pages/dashboard.tsx` - Main dashboard with API/platform status
@@ -36,6 +36,7 @@ A unified social media API platform providing consistent interfaces for Twitter,
 - `/facebook` - Facebook API interactions
 - `/linkedin` - LinkedIn API interactions
 - `/admin` - Admin settings (API key, Instagram token, request queue)
+- `/admin/tokens` - Platform token management (add/remove tokens per platform, restart Python server)
 
 ## API Endpoints
 - `GET /api/uniapi/health` - Check Python API connectivity
@@ -45,8 +46,13 @@ A unified social media API platform providing consistent interfaces for Twitter,
 - `POST /api/admin/login` - Admin login (default password: `admin123`)
 - `GET /api/admin/settings` - Get admin settings (auth required)
 - `POST /api/admin/reset-api-key` - Reset API key (auth required)
+- `GET /api/admin/platform-tokens` - List platform tokens (auth required)
+- `POST /api/admin/platform-tokens` - Add/update platform token (auth required)
+- `DELETE /api/admin/platform-tokens/:id` - Delete platform token (auth required)
+- `POST /api/admin/restart-python` - Restart Python scraper server (auth required)
 
 ## Recent Changes
+- 2026-02-10: Added Platform Tokens admin page with per-platform token management and Python server restart
 - 2026-02-10: Connected Python FastAPI backend to React/Express frontend
 - 2026-02-10: Added child process management for Python API with auto-restart
 - 2026-02-10: Fixed proxy pathRewrite to preserve /api/v1 prefix

@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Settings,
   Globe,
+  Key,
 } from "lucide-react";
 import { SiX, SiInstagram, SiTiktok, SiFacebook, SiLinkedin } from "react-icons/si";
 
@@ -27,6 +28,7 @@ const platformItems = [
 
 const managementItems = [
   { title: "Admin Settings", url: "/admin", icon: Settings },
+  { title: "Platform Tokens", url: "/admin/tokens", icon: Key },
 ];
 
 export function AppSidebar() {

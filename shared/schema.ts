@@ -26,10 +26,21 @@ export const adminSettings = pgTable("admin_settings", {
   instagramToken: text("instagram_token"),
 });
 
+export const platformTokens = pgTable("platform_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: text("platform").notNull(),
+  tokenKey: text("token_key").notNull(),
+  tokenValue: text("token_value").notNull(),
+});
+
 export const insertScrapeRequestSchema = createInsertSchema(scrapeRequests).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertPlatformTokenSchema = createInsertSchema(platformTokens).omit({
+  id: true,
 });
 
 export const clientScrapeRequestSchema = z.object({
@@ -52,4 +63,6 @@ export const updateInstagramTokenSchema = z.object({
 export type InsertScrapeRequest = z.infer<typeof insertScrapeRequestSchema>;
 export type ScrapeRequest = typeof scrapeRequests.$inferSelect;
 export type AdminSettings = typeof adminSettings.$inferSelect;
+export type PlatformToken = typeof platformTokens.$inferSelect;
+export type InsertPlatformToken = z.infer<typeof insertPlatformTokenSchema>;
 export type ClientScrapeRequest = z.infer<typeof clientScrapeRequestSchema>;

@@ -1,14 +1,18 @@
 import { db } from "./db";
-import { scrapeRequests, adminSettings } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { scrapeRequests, adminSettings, platformTokens } from "@shared/schema";
+import { eq, desc, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import type { ScrapeRequest, AdminSettings } from "@shared/schema";
+import type { ScrapeRequest, AdminSettings, PlatformToken, InsertPlatformToken } from "@shared/schema";
 
 export interface IStorage {
   getAdminSettings(): Promise<AdminSettings | undefined>;
   initializeAdmin(password: string): Promise<AdminSettings>;
   resetApiKey(): Promise<string>;
   updateInstagramToken(token: string): Promise<void>;
+
+  getPlatformTokens(platform?: string): Promise<PlatformToken[]>;
+  upsertPlatformToken(data: InsertPlatformToken): Promise<PlatformToken>;
+  deletePlatformToken(id: string): Promise<void>;
 
   createScrapeRequest(data: {
     requestType: string;
@@ -64,6 +68,47 @@ export class DatabaseStorage implements IStorage {
         .set({ instagramToken: token })
         .where(eq(adminSettings.id, settings.id));
     }
+  }
+
+  async getPlatformTokens(platform?: string): Promise<PlatformToken[]> {
+    if (platform) {
+      return db
+        .select()
+        .from(platformTokens)
+        .where(eq(platformTokens.platform, platform));
+    }
+    return db.select().from(platformTokens);
+  }
+
+  async upsertPlatformToken(data: InsertPlatformToken): Promise<PlatformToken> {
+    const [existing] = await db
+      .select()
+      .from(platformTokens)
+      .where(
+        and(
+          eq(platformTokens.platform, data.platform),
+          eq(platformTokens.tokenKey, data.tokenKey)
+        )
+      );
+
+    if (existing) {
+      const [updated] = await db
+        .update(platformTokens)
+        .set({ tokenValue: data.tokenValue })
+        .where(eq(platformTokens.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const [created] = await db
+      .insert(platformTokens)
+      .values(data)
+      .returning();
+    return created;
+  }
+
+  async deletePlatformToken(id: string): Promise<void> {
+    await db.delete(platformTokens).where(eq(platformTokens.id, id));
   }
 
   async createScrapeRequest(data: {
