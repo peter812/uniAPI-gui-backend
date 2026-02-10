@@ -254,11 +254,6 @@ export default function AdminTokens({ sessionToken }: AdminTokensProps) {
     queryKey: ["/api/admin/platform-tokens"],
     queryFn: async () => {
       const res = await authFetch("/api/admin/platform-tokens", sessionToken);
-      if (res.status === 401) {
-        sessionStorage.removeItem("adminSession");
-        window.location.reload();
-        throw new Error("Session expired");
-      }
       if (!res.ok) throw new Error("Failed to fetch tokens");
       return res.json();
     },
