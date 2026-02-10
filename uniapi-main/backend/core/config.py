@@ -12,8 +12,12 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",  # Frontend dev
-        "http://localhost:8000",  # Backend dev
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "http://localhost:8000",
+        "http://localhost:8001",
+        "http://0.0.0.0:5000",
+        "*",
     ]
 
     # Database

@@ -1,41 +1,54 @@
-# UniAPI - Instagram Scraper API Wrapper
+# UniAPI - Universal Social Media API Platform
 
 ## Overview
-API wrapper service for the uniAPI Instagram scraper. Uses an async request/callback pattern where clients submit scrape requests and receive results via webhook callback.
+A unified social media API platform providing consistent interfaces for Twitter, Instagram, TikTok, Facebook, and LinkedIn. Combines a Python FastAPI backend with a React dashboard frontend served through Express.
 
 ## Architecture
-- **Frontend**: React + Vite admin dashboard at `/`
-- **Backend**: Express.js API server
+- **Frontend**: React + Vite dashboard at `/` with sidebar navigation
+- **Backend**: Express.js API server on port 5000 (proxies to Python API)
+- **Python API**: FastAPI (uvicorn) on internal port 8001 - spawned as child process from Express
 - **Database**: PostgreSQL via Drizzle ORM
-- **Pattern**: Async request queue with webhook callbacks
+- **Proxy**: Express forwards `/api/v1/*` requests to Python FastAPI
 
-## Flow
-1. Client POSTs to `/api/scrape` with request type, query, callback URL, client UUID, and API key
-2. Server validates API key, queues request, returns `200` + server UUID
-3. Server processes request (currently simulated, will connect to Python uniAPI scraper)
-4. On completion, server POSTs results to client's callback URL with the server UUID
+## Python API Integration
+- Python FastAPI server runs on port 8001 (internal only, not exposed externally)
+- Express spawns it as a child process in `server/index.ts` with auto-restart
+- Express proxies `/api/v1/*` to `http://127.0.0.1:8001/api/v1/*`
+- Health aggregation at `/api/uniapi/health` and `/api/uniapi/platforms`
+- Bridge servers (Playwright-based) needed for actual social media automation
 
 ## Key Files
+- `server/index.ts` - Express server + Python API child process management
+- `server/routes.ts` - API endpoints, proxy setup, admin auth
 - `shared/schema.ts` - Database models (scrape_requests, admin_settings)
-- `server/routes.ts` - All API endpoints
 - `server/storage.ts` - Database CRUD operations via Drizzle
-- `server/db.ts` - Database connection
-- `server/seed.ts` - Seeds default admin settings
-- `client/src/pages/admin.tsx` - Admin page wrapper with auth state
-- `client/src/pages/admin-login.tsx` - Login form
-- `client/src/pages/admin-dashboard.tsx` - Dashboard with API key, token, and queue management
+- `client/src/App.tsx` - React app with sidebar layout and routing
+- `client/src/pages/dashboard.tsx` - Main dashboard with API/platform status
+- `client/src/pages/platform-page.tsx` - Platform-specific API interaction pages
+- `client/src/components/app-sidebar.tsx` - Sidebar navigation
+- `uniapi-main/backend/main.py` - Python FastAPI entry point
 
-## Admin
-- Default password: `admin123`
-- Session tokens stored in-memory on server, sessionStorage on client
+## Pages
+- `/` - Dashboard with API health and platform status
+- `/twitter` - Twitter API interactions (user lookup, tweets, search, likes, follow)
+- `/instagram` - Instagram API interactions (user lookup, likes, comments, DMs, follow)
+- `/tiktok` - TikTok API interactions
+- `/facebook` - Facebook API interactions
+- `/linkedin` - LinkedIn API interactions
+- `/admin` - Admin settings (API key, Instagram token, request queue)
 
 ## API Endpoints
+- `GET /api/uniapi/health` - Check Python API connectivity
+- `GET /api/uniapi/platforms` - Get all platform statuses
+- `/api/v1/*` - Proxied to Python FastAPI (platform-specific endpoints)
 - `POST /api/scrape` - Submit scrape request (client-facing)
-- `POST /api/admin/login` - Admin login
-- `GET /api/admin/settings?sessionToken=` - Get admin settings
-- `POST /api/admin/reset-api-key` - Reset API key
-- `POST /api/admin/instagram-token` - Update Instagram token
-- `GET /api/admin/requests?sessionToken=` - List scrape requests
+- `POST /api/admin/login` - Admin login (default password: `admin123`)
+- `GET /api/admin/settings` - Get admin settings (auth required)
+- `POST /api/admin/reset-api-key` - Reset API key (auth required)
 
 ## Recent Changes
-- 2026-02-10: Initial build - schema, admin dashboard, API endpoints, seed data
+- 2026-02-10: Connected Python FastAPI backend to React/Express frontend
+- 2026-02-10: Added child process management for Python API with auto-restart
+- 2026-02-10: Fixed proxy pathRewrite to preserve /api/v1 prefix
+- 2026-02-10: Built dashboard with real-time platform health monitoring
+- 2026-02-10: Created platform-specific pages with tabbed API interaction UI

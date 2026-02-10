@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { spawn } from "child_process";
 
 const app = express();
 const httpServer = createServer(app);
@@ -59,7 +60,41 @@ app.use((req, res, next) => {
   next();
 });
 
+function startPythonApi() {
+  const pythonProcess = spawn("python", [
+    "-c",
+    `import uvicorn; uvicorn.run('main:app', host='0.0.0.0', port=8001, log_level='info')`
+  ], {
+    cwd: "./uniapi-main/backend",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env },
+  });
+
+  pythonProcess.stdout?.on("data", (data: Buffer) => {
+    const msg = data.toString().trim();
+    if (msg) log(msg, "uniapi");
+  });
+
+  pythonProcess.stderr?.on("data", (data: Buffer) => {
+    const msg = data.toString().trim();
+    if (msg) log(msg, "uniapi");
+  });
+
+  pythonProcess.on("error", (err) => {
+    log(`Failed to start Python API: ${err.message}`, "uniapi");
+  });
+
+  pythonProcess.on("exit", (code) => {
+    log(`Python API exited with code ${code}. Restarting in 5s...`, "uniapi");
+    setTimeout(startPythonApi, 5000);
+  });
+
+  return pythonProcess;
+}
+
 (async () => {
+  startPythonApi();
+
   await registerRoutes(httpServer, app);
 
   const { seedDatabase } = await import("./seed");

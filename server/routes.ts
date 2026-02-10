@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import { storage } from "./storage";
 import { clientScrapeRequestSchema } from "@shared/schema";
 import { randomUUID } from "crypto";
@@ -75,10 +76,73 @@ async function processCallback(requestId: string) {
   }
 }
 
+const PYTHON_API_URL = "http://127.0.0.1:8001";
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.get("/api/uniapi/health", async (_req, res) => {
+    try {
+      const response = await fetch(`${PYTHON_API_URL}/health`);
+      if (response.ok) {
+        res.json({ status: "connected" });
+      } else {
+        res.json({ status: "error", message: "Python API returned error" });
+      }
+    } catch {
+      res.json({ status: "disconnected", message: "Python API is not running" });
+    }
+  });
+
+  app.get("/api/uniapi/platforms", async (_req, res) => {
+    const platforms = ["twitter", "instagram", "tiktok", "facebook", "linkedin"];
+    const results: Record<string, any> = {};
+    await Promise.all(
+      platforms.map(async (platform) => {
+        try {
+          const response = await fetch(`${PYTHON_API_URL}/api/v1/${platform}/health`);
+          if (response.ok) {
+            results[platform] = await response.json();
+          } else if (platform === "twitter") {
+            try {
+              const fallback = await fetch(`${PYTHON_API_URL}/api/v1/twitter/users/me`);
+              if (fallback.ok) {
+                results[platform] = { status: "degraded", bridge_status: "disconnected", message: "Twitter API running, no bridge server" };
+              } else {
+                results[platform] = { status: "error", bridge_status: "disconnected" };
+              }
+            } catch {
+              results[platform] = { status: "unavailable", bridge_status: "disconnected" };
+            }
+          } else {
+            results[platform] = { status: "error", bridge_status: "disconnected" };
+          }
+        } catch {
+          results[platform] = { status: "unavailable", bridge_status: "disconnected" };
+        }
+      })
+    );
+    res.json(results);
+  });
+
+  app.use(
+    "/api/v1",
+    createProxyMiddleware({
+      target: PYTHON_API_URL,
+      changeOrigin: true,
+      pathRewrite: (_path: string, req: any) => req.originalUrl,
+      on: {
+        error: (_err, _req, res: any) => {
+          if (res.writeHead) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Python API is not available. Make sure the UniAPI server is running." }));
+          }
+        },
+      },
+    })
+  );
 
   app.post("/api/scrape", async (req, res) => {
     try {
