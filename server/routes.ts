@@ -4,7 +4,7 @@ import { createProxyMiddleware } from "http-proxy-middleware";
 import { storage } from "./storage";
 import { clientScrapeRequestSchema, insertPlatformTokenSchema } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { log, restartPythonApi } from "./index";
+import { log, restartPythonApi, startBridge, stopBridge, isBridgeRunning } from "./index";
 import bcrypt from "bcryptjs";
 
 const activeSessions = new Map<string, { createdAt: number }>();
@@ -315,6 +315,31 @@ export async function registerRoutes(
       res.json({ success: true, message: "Python server restarted" });
     } catch (error: any) {
       res.status(500).json({ error: "Failed to restart Python server", message: error.message });
+    }
+  });
+
+  app.get("/api/bridge/status/:platform", async (req, res) => {
+    const { platform } = req.params;
+    res.json({ platform, running: isBridgeRunning(platform) });
+  });
+
+  app.post("/api/bridge/start/:platform", async (req, res) => {
+    const { platform } = req.params;
+    try {
+      const result = await startBridge(platform);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/bridge/stop/:platform", async (req, res) => {
+    const { platform } = req.params;
+    try {
+      const result = await stopBridge(platform);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
     }
   });
 

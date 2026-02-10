@@ -101,6 +101,86 @@ function startPythonApi() {
   return pythonProcess;
 }
 
+const BRIDGE_CONFIG: Record<string, { port: number; script: string; cwd: string }> = {
+  instagram: { port: 5002, script: "instagram_bridge_server.py", cwd: "./uniapi-main/backend/platforms/instagram" },
+  facebook: { port: 5004, script: "facebook_bridge_server.py", cwd: "./uniapi-main/backend/platforms/facebook" },
+};
+
+const bridgeProcesses: Record<string, ReturnType<typeof spawn>> = {};
+
+export function startBridge(platform: string): Promise<{ success: boolean; message: string }> {
+  return new Promise((resolve) => {
+    const config = BRIDGE_CONFIG[platform];
+    if (!config) {
+      resolve({ success: false, message: `Unknown platform: ${platform}` });
+      return;
+    }
+
+    if (bridgeProcesses[platform]) {
+      resolve({ success: false, message: `${platform} bridge is already running` });
+      return;
+    }
+
+    const proc = spawn("python", [config.script], {
+      cwd: config.cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env },
+    });
+
+    proc.stdout?.on("data", (data: Buffer) => {
+      const msg = data.toString().trim();
+      if (msg) log(msg, `${platform}-bridge`);
+    });
+
+    proc.stderr?.on("data", (data: Buffer) => {
+      const msg = data.toString().trim();
+      if (msg) log(msg, `${platform}-bridge`);
+    });
+
+    proc.on("error", (err) => {
+      log(`Failed to start ${platform} bridge: ${err.message}`, `${platform}-bridge`);
+      delete bridgeProcesses[platform];
+    });
+
+    proc.on("exit", (code) => {
+      log(`${platform} bridge exited with code ${code}`, `${platform}-bridge`);
+      delete bridgeProcesses[platform];
+    });
+
+    bridgeProcesses[platform] = proc;
+    setTimeout(() => {
+      resolve({ success: true, message: `${platform} bridge server started on port ${config.port}` });
+    }, 2000);
+  });
+}
+
+export function stopBridge(platform: string): Promise<{ success: boolean; message: string }> {
+  return new Promise((resolve) => {
+    const proc = bridgeProcesses[platform];
+    if (!proc) {
+      resolve({ success: false, message: `${platform} bridge is not running` });
+      return;
+    }
+
+    proc.once("exit", () => {
+      delete bridgeProcesses[platform];
+      resolve({ success: true, message: `${platform} bridge stopped` });
+    });
+
+    proc.kill("SIGTERM");
+    setTimeout(() => {
+      if (bridgeProcesses[platform]) {
+        delete bridgeProcesses[platform];
+        resolve({ success: true, message: `${platform} bridge stopped (forced)` });
+      }
+    }, 5000);
+  });
+}
+
+export function isBridgeRunning(platform: string): boolean {
+  return !!bridgeProcesses[platform];
+}
+
 export function restartPythonApi(): Promise<void> {
   return new Promise((resolve) => {
     if (pythonProcess) {

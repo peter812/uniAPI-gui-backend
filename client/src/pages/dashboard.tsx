@@ -1,30 +1,101 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import {
   Activity,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   ArrowRight,
+  Plug,
+  Unplug,
+  Loader2,
 } from "lucide-react";
 import { SiX, SiInstagram, SiTiktok, SiFacebook, SiLinkedin } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 
-const platformConfig: Record<string, { icon: typeof SiX; label: string; path: string }> = {
-  twitter: { icon: SiX, label: "Twitter", path: "/twitter" },
-  instagram: { icon: SiInstagram, label: "Instagram", path: "/instagram" },
-  tiktok: { icon: SiTiktok, label: "TikTok", path: "/tiktok" },
-  facebook: { icon: SiFacebook, label: "Facebook", path: "/facebook" },
-  linkedin: { icon: SiLinkedin, label: "LinkedIn", path: "/linkedin" },
+const platformConfig: Record<string, { icon: typeof SiX; label: string; path: string; hasBridge: boolean }> = {
+  twitter: { icon: SiX, label: "Twitter", path: "/twitter", hasBridge: false },
+  instagram: { icon: SiInstagram, label: "Instagram", path: "/instagram", hasBridge: true },
+  tiktok: { icon: SiTiktok, label: "TikTok", path: "/tiktok", hasBridge: false },
+  facebook: { icon: SiFacebook, label: "Facebook", path: "/facebook", hasBridge: true },
+  linkedin: { icon: SiLinkedin, label: "LinkedIn", path: "/linkedin", hasBridge: false },
 };
 
 function StatusIcon({ status }: { status: string }) {
   if (status === "ok" || status === "healthy") return <CheckCircle2 className="w-4 h-4 text-green-500" />;
   if (status === "degraded") return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
   return <XCircle className="w-4 h-4 text-red-500" />;
+}
+
+function BridgeButton({ platform }: { platform: string }) {
+  const { toast } = useToast();
+
+  const { data: bridgeStatus } = useQuery<{ platform: string; running: boolean }>({
+    queryKey: ["/api/bridge/status", platform],
+    queryFn: async () => {
+      const res = await fetch(`/api/bridge/status/${platform}`);
+      if (!res.ok) throw new Error("Failed to fetch bridge status");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
+
+  const startMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/bridge/start/${platform}`, { method: "POST" });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bridge/status", platform] });
+      queryClient.invalidateQueries({ queryKey: ["/api/uniapi/platforms"] });
+      toast({ title: data.message });
+    },
+    onError: () => {
+      toast({ title: "Failed to start bridge", variant: "destructive" });
+    },
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/bridge/stop/${platform}`, { method: "POST" });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bridge/status", platform] });
+      queryClient.invalidateQueries({ queryKey: ["/api/uniapi/platforms"] });
+      toast({ title: data.message });
+    },
+    onError: () => {
+      toast({ title: "Failed to stop bridge", variant: "destructive" });
+    },
+  });
+
+  const isRunning = bridgeStatus?.running;
+  const isPending = startMutation.isPending || stopMutation.isPending;
+
+  return (
+    <Button
+      size="sm"
+      variant={isRunning ? "outline" : "default"}
+      onClick={() => (isRunning ? stopMutation.mutate() : startMutation.mutate())}
+      disabled={isPending}
+      data-testid={`button-bridge-${platform}`}
+    >
+      {isPending ? (
+        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+      ) : isRunning ? (
+        <Unplug className="w-3 h-3 mr-1" />
+      ) : (
+        <Plug className="w-3 h-3 mr-1" />
+      )}
+      {isPending ? "..." : isRunning ? "Disconnect" : "Connect Bridge"}
+    </Button>
+  );
 }
 
 export default function Dashboard() {
@@ -109,15 +180,20 @@ export default function Dashboard() {
                         >
                           Bridge: {platformData?.bridge_status || "unknown"}
                         </Badge>
-                        <Link href={config.path}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            data-testid={`button-goto-${key}`}
-                          >
-                            <ArrowRight className="w-3 h-3" />
-                          </Button>
-                        </Link>
+                        <div className="flex items-center gap-1">
+                          {config.hasBridge && (
+                            <BridgeButton platform={key} />
+                          )}
+                          <Link href={config.path}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              data-testid={`button-goto-${key}`}
+                            >
+                              <ArrowRight className="w-3 h-3" />
+                            </Button>
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   )}
