@@ -5,33 +5,8 @@ import { storage } from "./storage";
 import { clientScrapeRequestSchema, insertPlatformTokenSchema } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { log, restartPythonApi, startBridge, stopBridge, isBridgeRunning } from "./index";
-import bcrypt from "bcryptjs";
-
-const activeSessions = new Map<string, { createdAt: number }>();
-const SESSION_TTL = 24 * 60 * 60 * 1000;
-
-function isValidSession(token: string): boolean {
-  const session = activeSessions.get(token);
-  if (!session) return false;
-  if (Date.now() - session.createdAt > SESSION_TTL) {
-    activeSessions.delete(token);
-    return false;
-  }
+function requireAdmin(_req: any): boolean {
   return true;
-}
-
-function getSessionToken(req: any): string | undefined {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    return authHeader.slice(7);
-  }
-  return req.query.sessionToken as string | undefined;
-}
-
-function requireAdmin(req: any): boolean {
-  const token = getSessionToken(req);
-  if (!token) return false;
-  return isValidSession(token);
 }
 
 async function processCallback(requestId: string) {
@@ -185,37 +160,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/login", async (req, res) => {
-    try {
-      const { password } = req.body;
-      if (!password) {
-        return res.status(400).json({ error: "Password required" });
-      }
-
-      const settings = await storage.getAdminSettings();
-      if (!settings) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-
-      const isValid = password === settings.adminPassword;
-      if (!isValid) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-
-      const sessionToken = randomUUID();
-      activeSessions.set(sessionToken, { createdAt: Date.now() });
-
-      res.json({ sessionToken });
-    } catch (error: any) {
-      res.status(500).json({ error: "Internal server error" });
-    }
+  app.post("/api/admin/login", async (_req, res) => {
+    res.json({ sessionToken: "no-auth" });
   });
 
-  app.post("/api/admin/logout", async (req, res) => {
-    const token = getSessionToken(req);
-    if (token) {
-      activeSessions.delete(token);
-    }
+  app.post("/api/admin/logout", async (_req, res) => {
     res.json({ success: true });
   });
 
