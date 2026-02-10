@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { storage } from "./storage";
 import { clientScrapeRequestSchema, insertPlatformTokenSchema } from "@shared/schema";
+import type { InsertPlatformToken } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { log, restartPythonApi, startBridge, stopBridge, isBridgeRunning } from "./index";
 function requireAdmin(_req: any): boolean {
@@ -158,54 +159,6 @@ export async function registerRoutes(
       log(`Scrape request error: ${error.message}`);
       res.status(500).json({ error: "Internal server error" });
     }
-  });
-
-  app.post("/api/admin/login", async (_req, res) => {
-    res.json({ sessionToken: "no-auth" });
-  });
-
-  app.post("/api/admin/logout", async (_req, res) => {
-    res.json({ success: true });
-  });
-
-  app.get("/api/admin/settings", async (req, res) => {
-    if (!requireAdmin(req)) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    const settings = await storage.getAdminSettings();
-    if (!settings) {
-      return res.status(404).json({ error: "Settings not initialized" });
-    }
-
-    res.json({
-      id: settings.id,
-      apiKey: settings.apiKey,
-      instagramToken: settings.instagramToken,
-    });
-  });
-
-  app.post("/api/admin/reset-api-key", async (req, res) => {
-    if (!requireAdmin(req)) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    const newKey = await storage.resetApiKey();
-    res.json({ apiKey: newKey });
-  });
-
-  app.post("/api/admin/instagram-token", async (req, res) => {
-    if (!requireAdmin(req)) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    const { instagramToken } = req.body;
-    if (!instagramToken || typeof instagramToken !== "string") {
-      return res.status(400).json({ error: "Instagram token required" });
-    }
-
-    await storage.updateInstagramToken(instagramToken);
-    res.json({ success: true });
   });
 
   app.get("/api/admin/requests", async (req, res) => {

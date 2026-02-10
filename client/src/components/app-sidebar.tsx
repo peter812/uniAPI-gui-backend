@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard,
-  Settings,
   Globe,
   Key,
 } from "lucide-react";
@@ -27,7 +26,6 @@ const platformItems = [
 ];
 
 const managementItems = [
-  { title: "Admin Settings", url: "/admin", icon: Settings },
   { title: "Platform Tokens", url: "/admin/tokens", icon: Key },
 ];
 
