@@ -4,11 +4,15 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["libxcrypt"]
+packages = ["gitFull", "libxcrypt", "playwright-driver"]
 
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 5002
+externalPort = 3002
 
 [[ports]]
 localPort = 8001

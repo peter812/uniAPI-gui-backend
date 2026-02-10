@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { spawn } from "child_process";
+import fs from "fs";
 
 const app = express();
 const httpServer = createServer(app);
@@ -108,8 +109,36 @@ const BRIDGE_CONFIG: Record<string, { port: number; script: string; cwd: string 
 
 const bridgeProcesses: Record<string, ReturnType<typeof spawn>> = {};
 
+async function generateAuthFile(platform: string, cwd: string): Promise<void> {
+  try {
+    const { storage } = await import("./storage");
+    const tokens = await storage.getPlatformTokens(platform);
+    if (tokens.length === 0) return;
+
+    const authData: Record<string, any> = {};
+    const platformAuth: Record<string, any> = { cookies: {} };
+
+    for (const token of tokens) {
+      if (token.tokenKey.toLowerCase() === "sessionid" || token.tokenKey.toLowerCase() === "session_id") {
+        platformAuth.cookies.sessionid = token.tokenValue;
+      } else if (token.tokenKey.toLowerCase().startsWith("cookie_")) {
+        platformAuth.cookies[token.tokenKey.replace(/^cookie_/i, "")] = token.tokenValue;
+      } else {
+        platformAuth[token.tokenKey] = token.tokenValue;
+      }
+    }
+
+    authData[platform] = platformAuth;
+    const authFilePath = `${cwd}/platforms_auth.json`;
+    fs.writeFileSync(authFilePath, JSON.stringify(authData, null, 2));
+    log(`Generated auth file for ${platform} at ${authFilePath}`, `${platform}-bridge`);
+  } catch (err: any) {
+    log(`Warning: Could not generate auth file for ${platform}: ${err.message}`, `${platform}-bridge`);
+  }
+}
+
 export function startBridge(platform: string): Promise<{ success: boolean; message: string }> {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     const config = BRIDGE_CONFIG[platform];
     if (!config) {
       resolve({ success: false, message: `Unknown platform: ${platform}` });
@@ -120,6 +149,11 @@ export function startBridge(platform: string): Promise<{ success: boolean; messa
       resolve({ success: false, message: `${platform} bridge is already running` });
       return;
     }
+
+    await generateAuthFile(platform, config.cwd);
+
+    let resolved = false;
+    let stderrOutput = "";
 
     const proc = spawn("python", [config.script], {
       cwd: config.cwd,
@@ -134,23 +168,40 @@ export function startBridge(platform: string): Promise<{ success: boolean; messa
 
     proc.stderr?.on("data", (data: Buffer) => {
       const msg = data.toString().trim();
-      if (msg) log(msg, `${platform}-bridge`);
+      if (msg) {
+        log(msg, `${platform}-bridge`);
+        stderrOutput += msg + "\n";
+      }
     });
 
     proc.on("error", (err) => {
       log(`Failed to start ${platform} bridge: ${err.message}`, `${platform}-bridge`);
       delete bridgeProcesses[platform];
+      if (!resolved) {
+        resolved = true;
+        resolve({ success: false, message: `Failed to start ${platform} bridge: ${err.message}` });
+      }
     });
 
     proc.on("exit", (code) => {
       log(`${platform} bridge exited with code ${code}`, `${platform}-bridge`);
       delete bridgeProcesses[platform];
+      if (!resolved) {
+        resolved = true;
+        const errorMsg = stderrOutput.includes("ModuleNotFoundError")
+          ? stderrOutput.match(/ModuleNotFoundError: .+/)?.[0] || stderrOutput.trim()
+          : stderrOutput.trim() || `Process exited with code ${code}`;
+        resolve({ success: false, message: `${platform} bridge crashed: ${errorMsg}` });
+      }
     });
 
     bridgeProcesses[platform] = proc;
     setTimeout(() => {
-      resolve({ success: true, message: `${platform} bridge server started on port ${config.port}` });
-    }, 2000);
+      if (!resolved) {
+        resolved = true;
+        resolve({ success: true, message: `${platform} bridge server started on port ${config.port}` });
+      }
+    }, 3000);
   });
 }
 
